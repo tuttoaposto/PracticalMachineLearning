@@ -1,0 +1,159 @@
+###Title: Practical Machine Learning Project   
+###Author: Tuttoasposto   
+###Objective: Predict how well people perform weight lifting exercise using data from accelerometers on the belt 
+###<br>
+
+### Data partition
+Since the test data does not have the response variable to test for prediction accuracy, here we create a validation set to validate the model selected. We will partition the training data into a training set and a validation set in 0.75 and 0.25 ratio. The training set will be used to build the model, which will be used for prediction on the validation set. The predicted response will be compared to the reference response variable in the validation set for accuracy check.
+
+Bedore partitioning the training data, we will exclude some variables that do not contribute to the prediction algorithm. We will remove predictors that have lots of missing values ('NA' or '') since they do not have enough information to predict well. We will also remove measurement unrelated variables (e.g user name and timestamps).
+
+```{r, echo = T}
+#Read in training data
+setwd("C:/Users/m069284/RFolder")
+if (!file.exists('pml-training.csv'))
+  download.file('https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv', 'pml-training.csv')
+
+training <- read.csv('pml-training.csv', header = T, na.strings = c('NA', ''))
+
+#Outcome variable
+rbind(n = table(training$classe), pct = round(prop.table(table(training$classe))*100, 2))
+
+#Get predcitors that are non-missing in the training dataset
+nonMiss <- as.character()
+for (i in 1 : ncol(training))
+    if (sum(!is.na(training[ ,i])) == nrow(training))  
+          nonMiss <- c(nonMiss, colnames(training[i]))
+         
+nonMiss #down to 60 columns
+
+#Remove non-measurement related columns
+nonMiss <- nonMiss[-c(1:7)]
+
+training <- training[ , nonMiss] 
+dim(training) #19622, 53
+
+library(caret)
+#Separate into training set and validation set
+set.seed(123)
+inTrain = createDataPartition(training$classe, p = 3/4)[[1]]
+train <- training[inTrain, ]  
+valid <- training[-inTrain, ]
+
+dim(train); dim(valid)#14718 vs 4904
+```
+
+### Model building and validation
+Different recursive partitioning tree models will be fitted to the training set: 1) model without repeated sampling of observations or bagging (rpart); 2) model with bagging (treebag); 3) model involves both bagging of the observations and predictors (random forest). With extensve resampling of observations and predictors, we expect random forest gives the best prediction. All models have cross-validation applied.
+
+Model #1: rpart
+```{r, echo = T}
+set.seed(101)
+fit_rpart <- train(classe ~., method = 'rpart', data = train,
+                   trControl = trainControl(method = 'cv', number = 5))
+
+fit_rpart$finalModel
+fit_rpart$results
+
+library(rattle)
+fancyRpartPlot(fit_rpart$finalModel)
+
+pred_rpart <- predict(fit_rpart, newdata = valid)
+cm <- confusionMatrix(pred_rpart, valid$classe)
+
+options(scipen = 100)
+cm$table; cm$overall[1:4]
+```
+
+The dentrogram shows that the classification in the final nodes highly deviates from the actual classification. For example, in node #20, 44% of the data was classified to A while the actual proportion was only 28%. No node led to Class D.
+
+Numerically, the simple tree model has low prediction accuracy at 48.8% or high out of sample error at 51.2%.
+
+###<br>
+
+Model #2: treebag
+```{r, echo = T}
+set.seed(102)
+fit_bag <- train(classe ~., method = 'treebag', data = train,
+                   trControl = trainControl(method = 'cv', number = 5))
+
+fit_bag$finalModel
+fit_bag$results
+
+pred_bag <- predict(fit_bag, newdata = valid)
+cm <- confusionMatrix(pred_bag, valid$classe)
+
+cm$table; cm$overall[1:4]
+```
+
+With repeated sampling, the accuracies for both the training and validation sets have improved a lot to >98%.
+
+####<br>
+
+Model #3: random forest
+```{r, echo = T}
+set.seed(103)
+fit_rf <- train(classe ~., method = 'rf', data = train,
+                   trControl = trainControl(method = 'cv', number = 5))
+fit_rf
+fit_rf$finalModel
+
+pred_rf <- predict(fit_rf, newdata = valid)
+cm <- confusionMatrix(pred_rf, valid$classe)
+
+cm$table; cm$overall[1:4]
+
+varImp(fit_rf, scale = T)
+```
+
+With bagging of predictors, we allow to build more trees than the above two models (hence it's called random forest) and thus it takes the longest computation time. But it results in excellent accuracy at 99.3%, or out of sample error at 0.7%.
+
+The list of top 20 predictors shows that roll_belt has the best prediction power.
+
+###<br>
+
+### Prediction with final model
+Owing to the most superior accuracy of random forest classification, we adopt the last model for prediction on the test data. Likewise, we will remove non-predicting variables.
+```{r, echo = T}
+#Read in test data
+if (!file.exists('pml-testing.csv'))
+  download.file('https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv', 'pml-testing.csv')
+testing <- read.csv('pml-testing.csv', header = T)
+
+#Remove non-predicting columns
+nonMiss <- as.character()
+for (i in 1 : ncol(testing))
+    if (sum(!is.na(testing[ ,i])) == nrow(testing))  
+          nonMiss <- c(nonMiss, colnames(testing[i]))
+         
+nonMiss #down to 60 columns
+
+nonMiss <- nonMiss[-c(1:7, 60)]
+
+testing <- testing[ , nonMiss]
+dim(testing) #20 obs. of  52 variables
+
+pred <- predict(fit_rf, newdata = testing)
+pred
+```
+###<br>
+
+####Let's check the answers with the submission program
+```{r, echo = T}
+source('pml_write_files.R')
+pml_write_files(pred)
+letter <- as.character()
+for (i in 1:20){
+  x <- read.table(paste('problem_id_', i, '.txt', sep = ''), stringsAsFactors = F)
+  x <-as.character(x)
+  letter <- c(letter, x)
+}
+letter
+```
+All answers are correct!
+
+###<br>
+
+### Citations
+Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013.
+

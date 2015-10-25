@@ -1,16 +1,15 @@
 ###Title: Practical Machine Learning Project   
-###Author: Tuttoasposto   
 ###Objective: Predict how well people perform weight lifting exercise using data from accelerometers on the belt 
+
 ###<br>
 
 ### Data partition
 Since the test data does not have the response variable to test for prediction accuracy, here we create a validation set to validate the model selected. We will partition the training data into a training set and a validation set in 0.75 and 0.25 ratio. The training set will be used to build the model, which will be used for prediction on the validation set. The predicted response will be compared to the reference response variable in the validation set for accuracy check.
 
-Bedore partitioning the training data, we will exclude some variables that do not contribute to the prediction algorithm. We will remove predictors that have lots of missing values ('NA' or '') since they do not have enough information to predict well. We will also remove measurement unrelated variables (e.g user name and timestamps).
+Before partitioning the training data, we will exclude some variables that do not contribute to the prediction algorithm. We will remove predictors that have lots of missing values ('NA' or '') since they do not have enough information to predict well. We will also remove measurement unrelated variables (e.g user name and timestamps).
 
 ```{r, echo = T}
 #Read in training data
-setwd("C:/Users/m069284/RFolder")
 if (!file.exists('pml-training.csv'))
   download.file('https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv', 'pml-training.csv')
 
@@ -56,7 +55,7 @@ fit_rpart$finalModel
 fit_rpart$results
 
 library(rattle)
-fancyRpartPlot(fit_rpart$finalModel)
+fancyRpartPlot(fit_rpart$finalModel, sub = '')
 
 pred_rpart <- predict(fit_rpart, newdata = valid)
 cm <- confusionMatrix(pred_rpart, valid$classe)
